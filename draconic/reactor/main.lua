@@ -21,26 +21,22 @@ local lowReactorChargingRate = 160000.0
 local fastReactorChargingRate = 10000000.0
 updateDelay = 20
 updateLimitDelay = 8
-updateShieldDelay = 7
-updateShieldUpDelay = 5
 
 local fastChargeReactor = true
+local checkRFStorage = true
 
 -- limits
-local temp_limit = 8000
-local shield_percent_limit = 4.5
-local energy_limit = 1000000.0
+local temp_limit = 8500
+local shieldPercentDefaultLimit = 7
+local shield_percent_down_limit = 4.5
 
 -- auto
-local startShieldRate = startEnergyRate / 10
-local currentGenerationRate = startEnergyRate * 1.0
-local currentShieldRate = startShieldRate * 1.0
+local startShieldRate = startEnergyRate / 5
 countDelay = 0
-countShieldDelay = 0
 countLimitDelay = 0
-countShieldUpDelay = 0
 sleepDelay = 0.5
 DOWN = false
+WAS_EMERGENCY = false
 
 -- drac reactor variables
 drac_reactor_current = nil
@@ -60,14 +56,12 @@ function check_component_available(name, quit_program)
         if quit_program then
             print("This component is required to program working, termintaing...")
             os.exit()
+        else
+            print("WARNING!!! This component is not required, but some functions may not working")
         end
         return nil
     end
     return component[name]
-end
-
-function check_component_count(name, quit_program)
-    print_table(component)
 end
 
 function update_fields(reactor)
@@ -91,13 +85,26 @@ function ask(what)
     return result == 'Y' or result == 'y'
 end
 
+function printAuthor()
+    print("===================================================================================")
+    print("=                  Draconic reactor controller by NelttjeN                        =")
+    print("=                           Program version: 1.1                                  =")
+    print("= This project is open source, if you want to use it, you can find source code on =")
+    print("=            https://github.com/NelttjeN/minecraft-opencomputers-lua/             =")
+    print("=                 Was wrote during playing on Cristalix SkyVoid                   =")
+    print("===================================================================================")
+    print("")
+    print("")
+    print("")
+end
+
 
 -- main code
-print("Draconic reactor controller by NelttjeN")
-print("v 1.0")
+printAuthor()
 print("Initializing...")
 local dc_reactor = check_component_available("draconic_reactor", true)
 local flux_gate = check_component_available("flux_gate", true)
+local rfStorage = check_component_available("draconic_rf_storage", false)
 flux_gate_input = nil
 flux_gate_output = nil
 
@@ -112,7 +119,16 @@ if DEBUG then
     print("")
     print("Drac reactor stats")
     print_table(dc_reactor.getReactorInfo())
+
+    print("")
+    print("flux gate methods")
     print_table(flux_gate)
+    
+    if rfStorage ~= nil then
+        print("")
+        print("rf_storage methods")
+        print_table(rfStorage)
+    end
 
     os.exit()
 end
@@ -169,21 +185,25 @@ while true do
 end
 
 term.clear()
-print("Draconic reactor controller by NelttjeN")
-print("v 1.0")
+printAuthor()
 print("initialization done, Starting controller thread")
-flux_gate_input.setSignalLowFlow(0.0)
-flux_gate_output.setSignalLowFlow(0.0)
 
 -- reactor controll functions
-function gateUpdate()
-    flux_gate_input.setSignalLowFlow(currentShieldRate)
-    flux_gate_output.setSignalLowFlow(currentGenerationRate)
+function checkEnergy()
+    if rfStorage == nil then
+        return true
+    end
+    return component.draconic_rf_storage.getEnergyStored() / component.draconic_rf_storage.getMaxEnergyStored() < 0.02
+end
+
+
+function setGateFlow(gate, flow)
+    gate.setSignalLowFlow(flow)
 end
 
 function perform_start_checks()
     if drac_reactor_current.maxFuelConversion < fuel_max - fuel_miss_range then
-        print(string.format("Startup error: Please insert %s - %s amount of fuel", fuel_max - fuel_miss_range, fuel_max))
+        print(string.format("Startup error: Please insert %s - %s amount of fuel, current is %s", fuel_max - fuel_miss_range, fuel_max, drac_reactor_current.maxFuelConversion))
         return false
     end
     return true
@@ -197,61 +217,50 @@ function reactor_offline()
 end
 
 function checkTemp()
-    if drac_reactor_current.temperature < 7500 then
-        sleepDelay = 0.75
-        countDelay = countDelay + 1
-        if countDelay >= updateDelay then
-            currentGenerationRate = currentGenerationRate * 1.01
-            countDelay = 0
-        end
-    else
-        sleepDelay = 0.5
+    if drac_reactor_current.temperature < 7500.0 then
+        setGateFlow(flux_gate_output, drac_reactor_current.generationRate * 2)
+    elseif drac_reactor_current.temperature > 7500 and drac_reactor_current.temperature < 7950 then
+        setGateFlow(flux_gate_output, drac_reactor_current.generationRate + 1000.0)
+    elseif drac_reactor_current.temperature > 7950.0 then
+        setGateFlow(flux_gate_output, drac_reactor_current.generationRate - 1000.0)
     end
-    if drac_reactor_current.temperature > 7800 then
-        countLimitDelay = countLimitDelay + 1
-        if countLimitDelay >= updateLimitDelay then
-            currentGenerationRate = currentGenerationRate / 1.05
-            countLimitDelay = 0
-        end
-    end
+
     if drac_reactor_current.temperature > temp_limit then
         emergencyShutdownReactor()
+        WAS_EMERGENCY = true
     end
 end
 
-function checkShield(min, max, skipDelay)
+function checkShield()
     local percent = drac_reactor_current.fieldStrength / drac_reactor_current.maxFieldStrength * 100
-    if percent < shield_percent_limit then
-        currentShieldRate = currentShieldRate * 1.5
+
+    if percent < shield_percent_down_limit then
+        setGateFlow(flux_gate_input, 750000.0)
+    else
+        if shieldPercentDefaultLimit + 1.0 >= percent and percent >= shieldPercentDefaultLimit - 1.0 then
+
+        else
+            if shieldPercentDefaultLimit + 1 >= percent then
+                setGateFlow(flux_gate_input, drac_reactor_current.fieldDrainRate * (1 + shieldPercentDefaultLimit / 100) - 1000.0)
+            else
+                setGateFlow(flux_gate_input, drac_reactor_current.fieldDrainRate * (1 + shieldPercentDefaultLimit / 100)  + 1000.0)
+            end
+        end
     end
-    if percent < min then
-        countShieldDelay = countShieldDelay + 1
-        if countShieldDelay >= updateShieldDelay or skipDelay then
-            currentShieldRate = currentShieldRate + currentShieldRate / 5
-            countShieldDelay = 0
-        end
-    elseif percent > max then
-        countShieldUpDelay = countShieldUpDelay + 1
-        if countShieldUpDelay >= updateShieldUpDelay or skipDelay then
-            currentShieldRate = currentShieldRate - currentShieldRate / 5
-            countShieldUpDelay = 0
-        end
+
+    if percent < 1.0 then
+        emergencyShutdownReactor()
+        WAS_EMERGENCY = true
     end
 end
 
 function reactor_controller()
-    print("reactor controller ready")
-    while true do
+    while not DOWN do
         -- delayer
         os.sleep(sleepDelay)
         update_fields(dc_reactor)
 
-        if DOWN then
-            break
-        end
-
         if drac_reactor_current.status == "charging" then
-            sleepDelay = 0.5
             if fastChargeReactor then
                 flux_gate_input.setSignalLowFlow(fastReactorChargingRate)
             else
@@ -262,48 +271,78 @@ function reactor_controller()
             flux_gate_output.setSignalLowFlow(startEnergyRate)
             dc_reactor.activateReactor()
         elseif drac_reactor_current.status == "online" then
-            checkShield(7, 15, false)
+            checkShield()
             checkTemp()
-            gateUpdate()
+            if checkRFStorage then
+                if not checkEnergy then
+                    shutdown_reactor()
+                end
+            end
         elseif drac_reactor_current.status == "stopping" then
-            sleepDelay = 0.1
-            checkShield(10, 50, true)
-            gateUpdate()
+            local coef = 1.5
+            if WAS_EMERGENCY then
+                coef = 5
+            end
+            setGateFlow(flux_gate_output, drac_reactor_current.generationRate / coef)
+            setGateFlow(flux_gate_input, drac_reactor_current.fieldDrainRate * coef)
         end
     end
 end
 
-function shutdown_handler()
-    while true do
-    local down = io.read()
-    if not down then
-        DOWN = true
+function terminalController()
+    while not DOWN do
+        os.sleep(sleepDelay)
         term.clear()
-        local result = ask("Exiting program, Shutdown reactor?")
-        if result then
-            shutdown_reactor()
-        end
-        print("Exit")
-        os.exit()
+        printAuthor()
+        print("Observing not implemented yet")
     end
 end
 
-    
+-- function shutdown_handler()
+--     while true do
+--     local down = io.read()
+--     if not down then
+--         DOWN = true
+--         term.clear()
+--         local result = ask("Exiting program, Shutdown reactor?")
+--         if result then
+--             shutdown_reactor()
+--         end
+--         os.exit()
+--     end
+--     end
+-- end
+
+function handleReactorShutdown()
+    print("Stopping reactor, press ctrl + alt + c to forcequit")
+    while true do
+        update_fields(dc_reactor)
+        if drac_reactor_current.status == "offline" then
+            os.exit()
+        end
+        os.sleep(0.2)
+    end
 end
 
 function shutdown_reactor()
     dc_reactor.stopReactor()
+    handleReactorShutdown()
 end
 
 function emergencyShutdownReactor()
     dc_reactor.stopReactor()
     flux_gate_input.setSignalLowFlow(750000.0)
     flux_gate_output.setSignalLowFlow(startEnergyRate / 10)
+    handleReactorShutdown()
 end
 
 -- create thread of reactor
 update_fields(dc_reactor)
+
 if drac_reactor_current.status == "offline" then
+    setGateFlow(flux_gate_input, 0.0)
+    setGateFlow(flux_gate_output, 0.0)
+
     while true do
         local result = ask("Reactor offline, activate?")
         if result then
@@ -316,6 +355,6 @@ if drac_reactor_current.status == "offline" then
 end
 
 local rc_thread = thread.create(reactor_controller)
-local sd_thread = thread.create(shutdown_handler)
+local term_thread = thread.create(terminalController)
 
-thread.waitForAll({rc_thread, sd_thread})
+thread.waitForAll({rc_thread, term_thread})
