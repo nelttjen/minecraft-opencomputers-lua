@@ -7,14 +7,14 @@ lib.fastReactorChargingRate = 10000000.0  -- How fast reactor will charge with e
 lib.fastChargeReactor = true
 
 lib.temperatureLimit = 8500 -- Temperature limit, if above - emergency shutdown reactor, default: 8500
-lib.shieldPercentEmergencyLimit = 0.5 -- Sheild percent limit, if above - emergency shutdown reactor, default: 2
+lib.shieldPercentEmergencyLimit = 2 -- Sheild percent limit, if above - emergency shutdown reactor, default: 2
 lib.enableEmergencyMode = true -- Emergency mode system, default: true
 
 lib.fastReactorHeatLimit = 7500 -- Reactor will be fast heating while temperature is under this value, default: 7500
 lib.temperature = 7975 -- Reactor will keep this temperature while running
-lib.shieldPercentDefaultLimit = 2  -- Reactor will handle shield in +- 1% of this value, default: 7
+lib.shieldPercentDefaultLimit = 7  -- Reactor will handle shield in +- 1% of this value, default: 7
 
-lib.shieldPercentHelpLimit = 1 -- Limit to activate help energy flow to reactor's shield
+lib.shieldPercentHelpLimit = 3 -- Limit to activate help energy flow to reactor's shield, default: 3
 lib.energyHelpFlow = 750000.0 -- Help mode shield input rate, default: 750k RF/t (750000.0)
 lib.enableHelpShield = true -- Should help gate provide energy to low shield
 
