@@ -155,7 +155,7 @@ function lib.writeStats(dcReactor, timer)
     
     -- uptime
     termlib.printf("")
-    termlib.colorprintf(colorlib.cyan, "Uptime: ")
+    termlib.lcolorprintf(colorlib.cyan, "Uptime: ")
     termlib.colorprintf(colorlib.lime, "%.0f seconds", timer)
 
 end
