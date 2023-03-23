@@ -2,7 +2,6 @@ local gpu = require("component").gpu
 local math = require("math")
 local term = require("term")
 local colors = require("utils/colors_hex")
-local ut_table = require("utils/table")
 
 local lib = {}
 
