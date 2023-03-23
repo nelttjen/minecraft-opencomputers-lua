@@ -1,4 +1,3 @@
-local teblalib = require("utils/table")
 local termlib = require("utils/terminal")
 local colorlib = require("utils/colors_hex")
 local component = require("component")
@@ -22,7 +21,6 @@ end
 
 while true do
     termlib.clearTerm()
-    -- termlib.printAuthor(true)
     local countTanks = transposer.getTankCount(sides.top)
     local found = false
     termlib.colorprintf(colorlib.lime, "Fluids in outputsource:")
