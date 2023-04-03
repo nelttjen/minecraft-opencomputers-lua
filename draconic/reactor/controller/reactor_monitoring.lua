@@ -1,6 +1,5 @@
 local colorlib = require("utils/colors_hex")
 local termlib = require("utils/terminal")
-local timelib = require("utils/time")
 
 local lib = {}
 

@@ -6,10 +6,8 @@ local math = require("math")
 local transpose = component.transposer
 
 -- mylibs
-local tablelib = require("utils/table")
 local termlib = require("utils/terminal")
 local componentlib = require("utils/component")
-local colorlib = require("utils/colors_hex")
 local config = require("config")
 
 local altarSide = sides.back
